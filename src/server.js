@@ -1,9 +1,12 @@
 const express = require('express');
 
 const app = express();
+const cors = require('cors');
+const db = require('./database');
 const PORT = 3000;
 
 // Para ensinar o Express a tratar e devolver requisições em formato JSON.
+app.use(cors());
 app.use(express.json());
 
 
@@ -12,31 +15,23 @@ app.get('/', (req, res) => {
     return res.status(200).json({ mensagem: "Acesse /livros para manipular os livros."});
 });
 
-// Nosso "banco de dados" de livros........
-let livros = [
-    { id: 1, titulo: "O Senhor dos Anéis", autor: "J.R.R. Tolkien", ano: 1954},
-    { id: 2, titulo: "1984", autor: "George Orwell", ano: 1949}
-];
-
 // Listagem de livros
 app.get('/livros', (req, res) => {
+    const stmt = db.prepare('SELECT * FROM livros ORDER BY id ASC');
+    const livros = stmt.all();
     return res.status(200).json(livros);
 })
 
 // Consultar o livro por ID
 app.get('/livros/:id', (req, res) => {
-    const idBuscado = req.params.id;
-
-    const livro = livros.find(l => l.id == idBuscado);
+    const stmt = db.prepare('SELECT * FROM livros WHERE id = ?');
+    const livro = stmt.get(req.params.id);
 
     if (!livro) {
         return res.status(404).json({ mensagem: "Livro não encontrado"});
     }
     return res.status(200).json(livro);
 });
-
-// Declarar o próximo ID
-let proximoId = 3;
 
 // Cadastrar novo livro
 app.post('/livros', (req, res) => {
@@ -47,55 +42,53 @@ app.post('/livros', (req, res) => {
         return res.status(400).json({ mensagem: "Campos 'titulo', 'autor' e 'ano' são obrigatórios"});
     }
 
+    const stmt = db.prepare('INSERT INTO livros (titulo, autor, ano) VALUES (?, ?, ?)');
+    const resultado = stmt.run(titulo, autor, Number(ano));
+
+    // O SQLite devolve o ID gerado automaticamente via 'lastInsertRowid'
     const novoLivro = {
-        id: proximoId++,
+        id: Number(resultado.lastInsertRowid),
         titulo,
         autor,
         ano: Number(ano)
     };
-
-    livros.push(novoLivro);
 
     return res.status(201).json(novoLivro);
 });
 
 // Alterar um livro existente
 app.put('/livros/:id', (req, res) => {
-    const idBuscado = req.params.id;
-
-    const indice = livros.findIndex(l => l.id == idBuscado); 
-
-    if (indice === -1) {
-        return res.status(400).json({ mensagem: "Livro não encontrado para atualização."});
-    }
-
+    const { id } = req.params;
     const { titulo, autor, ano } = req.body;
 
     //Validação simples
     if (!titulo || !autor || !ano) {
         return res.status(400).json({ mensagem: "Campos 'titulo', 'autor' e 'ano' são obrigatórios"});
     }
-    
-    livros[indice] = { id: idBuscado,
+    const stmt = db.prepare('UPDATE livros SET titulo = ?, autor = ?, ano = ? WHERE id = ?');
+    const resultado = stmt.run(titulo, autor, Number(ano), id);
+
+    if (resultado.changes === 0) {
+        return res.status(404).json({ mensagem: "Livro não encontrado para atualização." });
+    }
+
+    livro = { id,
         titulo,
         autor,
         ano: Number(ano)
     }
 
-    return res.status(200).json(livros[indice]);
+    return res.status(200).json(livro);
 });
 
 // Apagar um livro
 app.delete('/livros/:id', (req, res) => {
-    const idBuscado = req.params.id;
+    const stmt = db.prepare('DELETE FROM livros WHERE id = ?');
+    const resultado = stmt.run(req.params.id);
 
-    const indice = livros.findIndex(l => l.id == idBuscado); 
-
-    if (indice === -1) {
-        return res.status(400).json({ mensagem: "Livro não encontrado para remoção."});
+    if (resultado.changes === 0) {
+        return res.status(404).json({ mensagem: "Livro não encontrado para remoção." });
     }
-
-    livros.splice(indice, 1);
     return res.status(204).send();
 });
 
