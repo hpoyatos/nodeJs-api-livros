@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerenciador de Livros</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- jQuery via CDN -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen p-4 sm:p-8">
+
+    <div class="max-w-4xl mx-auto">
+    <!-- Cabeçalho -->
+    <header class="flex justify-between items-center mb-8 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+      <div>
+        <h1 class="text-2xl font-bold text-indigo-900">Acervo da Biblioteca</h1>
+        <p class="text-sm text-slate-500">API Node.js + SQLite + jQuery</p>
+      </div>
+      <button id="btnNovoLivro" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
+        <span>+ Novo Livro</span>
+      </button>
+    </header>
+
+    <!-- Feedback visual (Toast/Alerta) -->
+    <div id="alerta" class="hidden mb-4 p-4 rounded-lg text-sm font-medium"></div>
+
+    <!-- Tabela de Listagem -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <table class="w-full text-left border-collapse">
+        <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 tracking-wider">
+          <tr>
+            <th class="p-4">ID</th>
+            <th class="p-4">Título</th>
+            <th class="p-4">Autor</th>
+            <th class="p-4">Ano</th>
+            <th class="p-4 text-center">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tabelaLivros" class="divide-y divide-slate-100 text-sm">
+          <tr>
+            <td colspan="5" class="p-4 text-center text-slate-400">Carregando acervo...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal de Formulário (Criar / Editar) -->
+  <div id="modalFormulario" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h2 id="modalTitulo" class="text-xl font-bold text-slate-800">Cadastrar Livro</h2>
+        <button class="btnFecharModal text-slate-400 hover:text-slate-600 font-bold">&times;</button>
+      </div>
+
+      <form id="formLivro" class="space-y-4">
+        <input type="hidden" id="livroId">
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Título</label>
+          <input type="text" id="inputTitulo" required placeholder="Ex: Dom Casmurro"
+                 class="w-full border border-slate-300 rounded-lg p-2.5 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Autor</label>
+          <input type="text" id="inputAutor" required placeholder="Ex: Machado de Assis"
+                 class="w-full border border-slate-300 rounded-lg p-2.5 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Ano de Publicação</label>
+          <input type="number" id="inputAno" required placeholder="Ex: 1899"
+                 class="w-full border border-slate-300 rounded-lg p-2.5 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+          <button type="button" class="btnFecharModal px-4 py-2 border rounded-lg text-slate-600 hover:bg-slate-50">Cancelar</button>
+          <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Script jQuery com o CRUD -->
+  <script>
+    const API_URL = 'http://localhost:3000/livros';
+
+    $(document).ready(function() {
+      // 1. Carrega os livros na inicialização da página
+      carregarLivros();
+
+      // Funções de manipulação do modal
+      $('#btnNovoLivro').click(function() {
+        $('#formLivro')[0].reset();
+        $('#livroId').val('');
+        $('#modalTitulo').text('Cadastrar Livro');
+        $('#modalFormulario').removeClass('hidden').addClass('flex');
+      });
+
+      $('.btnFecharModal').click(function() {
+        $('#modalFormulario').removeClass('flex').addClass('hidden');
+      });
+
+      // 2. SUBMIT: Criação ou Atualização via $.ajax
+      $('#formLivro').submit(function(e) {
+        e.preventDefault();
+
+        const id = $('#livroId').val();
+        const dados = {
+          titulo: $('#inputTitulo').val(),
+          autor: $('#inputAutor').val(),
+          ano: Number($('#inputAno').val())
+        };
+
+        const ehEdicao = Boolean(id);
+        const url = ehEdicao ? `${API_URL}/${id}` : API_URL;
+        const metodo = ehEdicao ? 'PUT' : 'POST';
+
+        $.ajax({
+          url: url,
+          type: metodo,
+          contentType: 'application/json',
+          data: JSON.stringify(dados),
+          success: function() {
+            mostrarMensagem(`Livro ${ehEdicao ? 'atualizado' : 'cadastrado'} com sucesso!`, 'sucesso');
+            $('#modalFormulario').removeClass('flex').addClass('hidden');
+            carregarLivros();
+          },
+          error: function(err) {
+            mostrarMensagem('Erro ao salvar livro. Verifique os dados.', 'erro');
+          }
+        });
+      });
+
+      // 3. EDITAR: Busca dados da linha e preenche o modal
+      $(document).on('click', '.btn-editar', function() {
+        const id = $(this).data('id');
+
+        $.ajax({
+          url: `${API_URL}/${id}`,
+          type: 'GET',
+          success: function(livro) {
+            $('#livroId').val(livro.id);
+            $('#inputTitulo').val(livro.titulo);
+            $('#inputAutor').val(livro.autor);
+            $('#inputAno').val(livro.ano);
+
+            $('#modalTitulo').text('Editar Livro #' + livro.id);
+            $('#modalFormulario').removeClass('hidden').addClass('flex');
+          },
+          error: function() {
+            mostrarMensagem('Não foi possível carregar os dados do livro.', 'erro');
+          }
+        });
+      });
+
+      // 4. DELETAR: Confirmação e remoção
+      $(document).on('click', '.btn-apagar', function() {
+        const id = $(this).data('id');
+
+        if (confirm(`Tem certeza de que deseja apagar o livro #${id}?`)) {
+          $.ajax({
+            url: `${API_URL}/${id}`,
+            type: 'DELETE',
+            success: function() {
+              mostrarMensagem('Livro removido com sucesso!', 'sucesso');
+              carregarLivros();
+            },
+            error: function() {
+              mostrarMensagem('Erro ao apagar o livro.', 'erro');
+            }
+          });
+        }
+      });
+    });      
+
+    // Função de leitura (GET)
+    function carregarLivros() {
+      $.ajax({
+        url: API_URL,
+        type: 'GET',
+        success: function(livros) {
+          const $tbody = $('#tabelaLivros');
+          $tbody.empty();
+
+          if (livros.length === 0) {
+            $tbody.html('<tr><td colspan="5" class="p-4 text-center text-slate-400">Nenhum livro cadastrado.</td></tr>');
+            return;
+          }
+
+          livros.forEach(function(livro) {
+            $tbody.append(`
+              <tr class="hover:bg-slate-50 transition-colors">
+                <td class="p-4 font-mono text-slate-400 text-xs">#${livro.id}</td>
+                <td class="p-4 font-medium text-slate-800">${livro.titulo}</td>
+                <td class="p-4 text-slate-600">${livro.autor}</td>
+                <td class="p-4 text-slate-500">${livro.ano}</td>
+                <td class="p-4 text-center space-x-2">
+                  <button class="btn-editar bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-semibold" data-id="${livro.id}">Editar</button>
+                  <button class="btn-apagar bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1 rounded text-xs font-semibold" data-id="${livro.id}">Excluir</button>
+                </td>
+              </tr>
+            `);
+          });
+        },
+        error: function() {
+          $('#tabelaLivros').html('<tr><td colspan="5" class="p-4 text-center text-rose-500">Erro ao carregar os dados da API. O servidor está rodando?</td></tr>');
+        }
+      });
+    }
+
+    // Feedback visual
+    function mostrarMensagem(texto, tipo) {
+      const $alerta = $('#alerta');
+      $alerta.removeClass('hidden bg-emerald-100 text-emerald-800 bg-rose-100 text-rose-800');
+
+      if (tipo === 'sucesso') {
+        $alerta.addClass('bg-emerald-100 text-emerald-800');
+      } else {
+        $alerta.addClass('bg-rose-100 text-rose-800');
+      }
+
+      $alerta.text(texto).fadeIn();
+      setTimeout(() => $alerta.fadeOut(), 3500);
+    }
+  </script>
+</body>
+</html>
